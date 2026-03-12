@@ -1,0 +1,67 @@
+server:
+  port: ${APP_PORT:8080}
+
+spring:
+  config:
+    import:
+      - optional:file:../infra/.env[.properties]
+      - optional:file:./infra/.env[.properties]
+
+  application:
+    name: ${APP_NAME:actrade-api}
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DB:actrade}
+    username: ${POSTGRES_USER:actrade}
+    password: ${POSTGRES_PASSWORD:actrade123}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: actrade-hikari-pool
+      minimum-idle: 2
+      maximum-pool-size: 10
+      auto-commit: false
+      connection-timeout: 30000
+
+  jpa:
+    open-in-view: false
+    show-sql: ${SHOW_SQL:false}
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    properties:
+      hibernate:
+        format_sql: true
+
+  sql:
+    init:
+      mode: ${SQL_INIT_MODE:never}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+      password: ${REDIS_PASSWORD:actrade123}
+      database: ${REDIS_DATABASE:0}
+      timeout: ${REDIS_TIMEOUT:3s}
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5673}
+    username: ${RABBITMQ_USER:actrade}
+    password: ${RABBITMQ_PASSWORD:actrade123}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    listener:
+      simple:
+        default-requeue-rejected: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${MANAGEMENT_ENDPOINTS:health,info}
+  endpoint:
+    health:
+      show-details: ${MANAGEMENT_HEALTH_DETAILS:always}
+
+logging:
+  level:
+    root: INFO
