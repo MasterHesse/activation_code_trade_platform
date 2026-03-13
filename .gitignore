@@ -1,4 +1,24 @@
+# Maven
+target/
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Env files
 .env
-.vscode
-node_modules
-dist
+**/.env
+
+# Spring
+application-local.yml
+application-secret.yml
