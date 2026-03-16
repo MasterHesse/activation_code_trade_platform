@@ -24,8 +24,14 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import jakarta.persistence.LockTimeoutException;
+import jakarta.persistence.OptimisticLockException;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -53,8 +59,20 @@ public class GlobalException {
 
         @ExceptionHandler(BusinessException.class)
         public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(ApiResponse.error(400, ex.getMessage()));
+                HttpStatus status = ex.getStatus() == null ? HttpStatus.BAD_REQUEST : ex.getStatus();
+                int code = ex.getCode() > 0 ? ex.getCode() : status.value();
+                return ResponseEntity.status(status)
+                        .body(ApiResponse.error(code, ex.getMessage()));
+        }
+
+        /**
+         * 兼容旧代码里还在抛 ResponseStatusException 的场景
+         */
+        @ExceptionHandler(ResponseStatusException.class)
+        public ResponseEntity<ApiResponse<Void>> handleResponseStatusException(ResponseStatusException ex) {
+                String message = StringUtils.hasText(ex.getReason()) ? ex.getReason() : "请求处理失败";
+                return ResponseEntity.status(ex.getStatusCode())
+                        .body(ApiResponse.error(ex.getStatusCode().value(), message));
         }
 
         @ExceptionHandler(IllegalArgumentException.class)
@@ -65,8 +83,8 @@ public class GlobalException {
 
         @ExceptionHandler(IllegalStateException.class)
         public ResponseEntity<ApiResponse<Void>> handleIllegalState(IllegalStateException ex) {
-        return ResponseEntity.badRequest()
-                .body(ApiResponse.error(400, ex.getMessage()));
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error(400, ex.getMessage()));
         }
 
         @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -234,5 +252,16 @@ public class GlobalException {
                 return index >= 0 ? propertyPath.substring(index + 1) : propertyPath;
         }
 
-        
+        @ExceptionHandler({
+                ObjectOptimisticLockingFailureException.class,
+                OptimisticLockException.class,
+                PessimisticLockingFailureException.class,
+                CannotAcquireLockException.class,
+                LockTimeoutException.class
+        })
+        public ResponseEntity<ApiResponse<Void>> handleConcurrentPayment(Exception ex) {
+        log.warn("Concurrent payment conflict", ex);
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(409, "订单正在支付处理中，请勿重复提交"));
+        }
 }

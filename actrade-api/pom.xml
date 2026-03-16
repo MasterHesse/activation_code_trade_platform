@@ -85,6 +85,15 @@
 			<artifactId>spring-rabbit-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+
+
+		<!-- Alipay SDK -->
+		<dependency>
+			<groupId>com.alipay.sdk</groupId>
+			<artifactId>alipay-easysdk</artifactId>
+			<version>2.2.1</version>
+		</dependency>
+
 	</dependencies>
 
 	<build>
