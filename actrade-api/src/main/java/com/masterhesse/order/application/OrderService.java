@@ -6,11 +6,14 @@ import com.masterhesse.order.api.request.SubmitOrderRequest;
 import com.masterhesse.order.api.response.OrderResponse;
 import com.masterhesse.order.api.response.OrderSummaryResponse;
 import com.masterhesse.order.api.response.PageResponse;
+import com.masterhesse.order.application.settlement.OrderSettlementService;
+import com.masterhesse.order.domain.FulfillmentStatus;
+import com.masterhesse.order.domain.FulfillmentType;
 import com.masterhesse.order.domain.Order;
 import com.masterhesse.order.domain.OrderItem;
 import com.masterhesse.order.domain.OrderStatus;
-import com.masterhesse.order.domain.PaymentMethod;
 import com.masterhesse.order.domain.PaymentStatus;
+import com.masterhesse.order.domain.SettlementStatus;
 import com.masterhesse.order.persistence.OrderItemRepository;
 import com.masterhesse.order.persistence.OrderRepository;
 import com.masterhesse.product.domain.DeliveryMode;
@@ -45,17 +48,33 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ProductRepository productRepository;
+    private final OrderPaymentService orderPaymentService;
+    private final OrderReceiptService orderReceiptService;
+    private final OrderSettlementService orderSettlementService;
 
     public OrderService(OrderRepository orderRepository,
                         OrderItemRepository orderItemRepository,
-                        ProductRepository productRepository) {
+                        ProductRepository productRepository,
+                        OrderPaymentService orderPaymentService,
+                        OrderReceiptService orderReceiptService,
+                        OrderSettlementService orderSettlementService) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.productRepository = productRepository;
+        this.orderPaymentService = orderPaymentService;
+        this.orderReceiptService = orderReceiptService;
+        this.orderSettlementService = orderSettlementService;
     }
 
     @Transactional
     public OrderResponse submitOrder(SubmitOrderRequest request) {
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "订单项不能为空"
+            );
+        }
+
         List<UUID> productIds = request.getItems().stream()
                 .map(SubmitOrderItemRequest::getProductId)
                 .distinct()
@@ -89,14 +108,32 @@ public class OrderService {
             );
         }
 
+        Set<FulfillmentType> fulfillmentTypes = request.getItems().stream()
+                .map(item -> productMap.get(item.getProductId()))
+                .map(this::resolveFulfillmentType)
+                .collect(Collectors.toSet());
+
+        if (fulfillmentTypes.size() != 1) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "一个订单只能提交同一履约方式的商品"
+            );
+        }
+
         UUID merchantId = merchantIds.iterator().next();
+        FulfillmentType fulfillmentType = fulfillmentTypes.iterator().next();
 
         Order order = new Order();
         order.setOrderNo(generateOrderNo());
         order.setUserId(request.getUserId());
         order.setMerchantId(merchantId);
+        order.setSellerId(merchantId);
         order.setOrderStatus(OrderStatus.CREATED);
         order.setPaymentStatus(PaymentStatus.UNPAID);
+        order.setFulfillmentType(fulfillmentType);
+        order.setFulfillmentStatus(FulfillmentStatus.PENDING);
+        order.setSettlementStatus(SettlementStatus.UNSETTLED);
+        order.setPayDeadlineAt(LocalDateTime.now().plusMinutes(30));
         order.setRemark(normalizeRemark(request.getRemark()));
 
         BigDecimal totalAmount = BigDecimal.ZERO;
@@ -137,17 +174,10 @@ public class OrderService {
 
     @Transactional
     public OrderResponse cancelOrder(UUID orderId) {
-        Order order = findOrderOrThrow(orderId);
+        Order order = findOrderForUpdateOrThrow(orderId);
 
         if (order.getOrderStatus() == OrderStatus.CANCELED) {
             return buildOrderResponse(order);
-        }
-
-        if (order.getPaymentStatus() == PaymentStatus.PAID) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "已支付订单暂不支持取消"
-            );
         }
 
         if (order.getOrderStatus() != OrderStatus.CREATED) {
@@ -157,7 +187,23 @@ public class OrderService {
             );
         }
 
+        if (order.getPaymentStatus() == PaymentStatus.PAID) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "已支付订单暂不支持取消"
+            );
+        }
+
+        if (order.getPaymentStatus() == PaymentStatus.PAYING) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "支付中的订单暂不支持取消，请等待支付结果"
+            );
+        }
+
         order.setOrderStatus(OrderStatus.CANCELED);
+        order.setPaymentStatus(PaymentStatus.CLOSED);
+        order.setClosedAt(LocalDateTime.now());
 
         Order savedOrder = orderRepository.save(order);
         return buildOrderResponse(savedOrder);
@@ -165,36 +211,12 @@ public class OrderService {
 
     @Transactional
     public OrderResponse payOrder(UUID orderId, PayOrderRequest request) {
-        Order order = findOrderOrThrow(orderId);
-
-        if (order.getOrderStatus() == OrderStatus.CANCELED) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "已取消订单不允许支付"
-            );
-        }
-
-        if (order.getPaymentStatus() == PaymentStatus.PAID) {
-            return buildOrderResponse(order);
-        }
-
-        if (order.getOrderStatus() != OrderStatus.CREATED) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "当前订单状态不允许支付: " + order.getOrderStatus()
-            );
-        }
-
-        PaymentMethod paymentMethod = request.getPaymentMethod();
-        handlePaymentByMethod(order, paymentMethod);
-
-        Order savedOrder = orderRepository.save(order);
-        return buildOrderResponse(savedOrder);
+        return orderPaymentService.payOrder(orderId, request);
     }
 
     @Transactional
     public OrderResponse deliverOrder(UUID orderId) {
-        Order order = findOrderOrThrow(orderId);
+        Order order = findOrderForUpdateOrThrow(orderId);
 
         if (order.getOrderStatus() == OrderStatus.DELIVERING) {
             return buildOrderResponse(order);
@@ -215,6 +237,14 @@ public class OrderService {
         }
 
         order.setOrderStatus(OrderStatus.DELIVERING);
+        order.setFulfillmentStatus(FulfillmentStatus.SUCCESS);
+
+        if (order.getDeliveredAt() == null) {
+            order.setDeliveredAt(LocalDateTime.now());
+        }
+        if (order.getConfirmDeadlineAt() == null) {
+            order.setConfirmDeadlineAt(LocalDateTime.now().plusHours(24));
+        }
 
         Order savedOrder = orderRepository.save(order);
         return buildOrderResponse(savedOrder);
@@ -222,7 +252,7 @@ public class OrderService {
 
     @Transactional
     public OrderResponse markDeliveryFailed(UUID orderId) {
-        Order order = findOrderOrThrow(orderId);
+        Order order = findOrderForUpdateOrThrow(orderId);
 
         if (order.getOrderStatus() == OrderStatus.DELIVERY_FAILED) {
             return buildOrderResponse(order);
@@ -236,6 +266,8 @@ public class OrderService {
         }
 
         order.setOrderStatus(OrderStatus.DELIVERY_FAILED);
+        order.setFulfillmentStatus(FulfillmentStatus.FAILED);
+        order.setConfirmDeadlineAt(null);
 
         Order savedOrder = orderRepository.save(order);
         return buildOrderResponse(savedOrder);
@@ -243,23 +275,25 @@ public class OrderService {
 
     @Transactional
     public OrderResponse confirmReceipt(UUID orderId) {
+        orderReceiptService.confirmReceipt(orderId);
+
+        // 待结算单由 OrderCompletedEventListener 在事务提交后自动创建
         Order order = findOrderOrThrow(orderId);
+        return buildOrderResponse(order);
+    }
 
-        if (order.getOrderStatus() == OrderStatus.COMPLETED) {
-            return buildOrderResponse(order);
-        }
+    @Transactional
+    public OrderResponse prepareSettlement(UUID orderId) {
+        orderSettlementService.createPendingSettlement(orderId);
+        Order order = findOrderOrThrow(orderId);
+        return buildOrderResponse(order);
+    }
 
-        if (order.getOrderStatus() != OrderStatus.DELIVERING) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "当前订单状态不允许确认收货: " + order.getOrderStatus()
-            );
-        }
-
-        order.setOrderStatus(OrderStatus.COMPLETED);
-
-        Order savedOrder = orderRepository.save(order);
-        return buildOrderResponse(savedOrder);
+    @Transactional
+    public OrderResponse markSettlementSettled(UUID orderId) {
+        orderSettlementService.markSettled(orderId);
+        Order order = findOrderOrThrow(orderId);
+        return buildOrderResponse(order);
     }
 
     @Transactional(readOnly = true)
@@ -316,23 +350,6 @@ public class OrderService {
         return PageResponse.from(orderPage, OrderSummaryResponse::from);
     }
 
-    private void handlePaymentByMethod(Order order, PaymentMethod paymentMethod) {
-        switch (paymentMethod) {
-            case MOCK, MANUAL -> markPaid(order, paymentMethod);
-            default -> throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "暂不支持的支付方式: " + paymentMethod
-            );
-        }
-    }
-
-    private void markPaid(Order order, PaymentMethod paymentMethod) {
-        order.setPaymentMethod(paymentMethod);
-        order.setPaymentStatus(PaymentStatus.PAID);
-        order.setOrderStatus(OrderStatus.PAID);
-        order.setPaidAt(LocalDateTime.now());
-    }
-
     private OrderResponse buildOrderResponse(Order order) {
         List<OrderItem> orderItems = orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getOrderId());
         return OrderResponse.from(order, orderItems);
@@ -340,6 +357,14 @@ public class OrderService {
 
     private Order findOrderOrThrow(UUID orderId) {
         return orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "订单不存在: " + orderId
+                ));
+    }
+
+    private Order findOrderForUpdateOrThrow(UUID orderId) {
+        return orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "订单不存在: " + orderId
@@ -384,8 +409,22 @@ public class OrderService {
     }
 
     /**
-     * 如果你的 Product 实体字段名不同，优先改下面这几个 readXXX 方法即可。
+     * 如果你的 Product / DeliveryMode 设计与当前项目不同，
+     * 优先只调整这个映射方法即可。
+     *
+     * 当前策略：
+     * - 名称像 ACTIVATION_TOOL / TOOL / API / AUTO_GENERATE -> ACTIVATION_TOOL
+     * - 其他默认走 STOCK_CODE
      */
+    private FulfillmentType resolveFulfillmentType(Product product) {
+        DeliveryMode deliveryMode = readDeliveryMode(product);
+        String modeName = deliveryMode.name();
+
+        return switch (modeName) {
+            case "ACTIVATION_TOOL", "TOOL", "API", "AUTO_GENERATE" -> FulfillmentType.ACTIVATION_TOOL;
+            default -> FulfillmentType.STOCK_CODE;
+        };
+    }
 
     private UUID readProductId(Product product) {
         UUID productId = product.getProductId();

@@ -1,26 +1,48 @@
 package com.masterhesse.order.api.response;
 
+import com.masterhesse.order.domain.FulfillmentStatus;
+import com.masterhesse.order.domain.FulfillmentType;
 import com.masterhesse.order.domain.Order;
 import com.masterhesse.order.domain.OrderStatus;
 import com.masterhesse.order.domain.PaymentMethod;
 import com.masterhesse.order.domain.PaymentStatus;
+import com.masterhesse.order.domain.SettlementStatus;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+@Getter
+@Setter
 public class OrderSummaryResponse {
 
     private UUID orderId;
     private String orderNo;
     private UUID userId;
     private UUID merchantId;
+    private UUID sellerId;
+
     private BigDecimal totalAmount;
     private BigDecimal payAmount;
+    private BigDecimal platformIncomeAmount;
+    private BigDecimal sellerIncomeAmount;
+
     private OrderStatus orderStatus;
     private PaymentStatus paymentStatus;
     private PaymentMethod paymentMethod;
+
+    private FulfillmentType fulfillmentType;
+    private FulfillmentStatus fulfillmentStatus;
+    private SettlementStatus settlementStatus;
+
     private LocalDateTime paidAt;
+    private LocalDateTime payDeadlineAt;
+    private LocalDateTime deliveredAt;
+    private LocalDateTime confirmDeadlineAt;
+    private LocalDateTime closedAt;
+
     private String remark;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -31,119 +53,30 @@ public class OrderSummaryResponse {
         response.setOrderNo(order.getOrderNo());
         response.setUserId(order.getUserId());
         response.setMerchantId(order.getMerchantId());
+        response.setSellerId(order.getSellerId());
+
         response.setTotalAmount(order.getTotalAmount());
         response.setPayAmount(order.getPayAmount());
+        response.setPlatformIncomeAmount(order.getPlatformIncomeAmount());
+        response.setSellerIncomeAmount(order.getSellerIncomeAmount());
+
         response.setOrderStatus(order.getOrderStatus());
         response.setPaymentStatus(order.getPaymentStatus());
         response.setPaymentMethod(order.getPaymentMethod());
+
+        response.setFulfillmentType(order.getFulfillmentType());
+        response.setFulfillmentStatus(order.getFulfillmentStatus());
+        response.setSettlementStatus(order.getSettlementStatus());
+
         response.setPaidAt(order.getPaidAt());
+        response.setPayDeadlineAt(order.getPayDeadlineAt());
+        response.setDeliveredAt(order.getDeliveredAt());
+        response.setConfirmDeadlineAt(order.getConfirmDeadlineAt());
+        response.setClosedAt(order.getClosedAt());
+
         response.setRemark(order.getRemark());
         response.setCreatedAt(order.getCreatedAt());
         response.setUpdatedAt(order.getUpdatedAt());
         return response;
-    }
-
-    public UUID getOrderId() {
-        return orderId;
-    }
-
-    public void setOrderId(UUID orderId) {
-        this.orderId = orderId;
-    }
-
-    public String getOrderNo() {
-        return orderNo;
-    }
-
-    public void setOrderNo(String orderNo) {
-        this.orderNo = orderNo;
-    }
-
-    public UUID getUserId() {
-        return userId;
-    }
-
-    public void setUserId(UUID userId) {
-        this.userId = userId;
-    }
-
-    public UUID getMerchantId() {
-        return merchantId;
-    }
-
-    public void setMerchantId(UUID merchantId) {
-        this.merchantId = merchantId;
-    }
-
-    public BigDecimal getTotalAmount() {
-        return totalAmount;
-    }
-
-    public void setTotalAmount(BigDecimal totalAmount) {
-        this.totalAmount = totalAmount;
-    }
-
-    public BigDecimal getPayAmount() {
-        return payAmount;
-    }
-
-    public void setPayAmount(BigDecimal payAmount) {
-        this.payAmount = payAmount;
-    }
-
-    public OrderStatus getOrderStatus() {
-        return orderStatus;
-    }
-
-    public void setOrderStatus(OrderStatus orderStatus) {
-        this.orderStatus = orderStatus;
-    }
-
-    public PaymentStatus getPaymentStatus() {
-        return paymentStatus;
-    }
-
-    public void setPaymentStatus(PaymentStatus paymentStatus) {
-        this.paymentStatus = paymentStatus;
-    }
-
-    public PaymentMethod getPaymentMethod() {
-        return paymentMethod;
-    }
-
-    public void setPaymentMethod(PaymentMethod paymentMethod) {
-        this.paymentMethod = paymentMethod;
-    }
-
-    public LocalDateTime getPaidAt() {
-        return paidAt;
-    }
-
-    public void setPaidAt(LocalDateTime paidAt) {
-        this.paidAt = paidAt;
-    }
-
-    public String getRemark() {
-        return remark;
-    }
-
-    public void setRemark(String remark) {
-        this.remark = remark;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
     }
 }

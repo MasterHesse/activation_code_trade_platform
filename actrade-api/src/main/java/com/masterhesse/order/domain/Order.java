@@ -27,8 +27,12 @@ import java.util.UUID;
         indexes = {
                 @Index(name = "idx_orders_user_id", columnList = "user_id"),
                 @Index(name = "idx_orders_merchant_id", columnList = "merchant_id"),
+                @Index(name = "idx_orders_seller_id", columnList = "seller_id"),
                 @Index(name = "idx_orders_order_status", columnList = "order_status"),
                 @Index(name = "idx_orders_payment_status", columnList = "payment_status"),
+                @Index(name = "idx_orders_payment_request_no", columnList = "payment_request_no"),
+                @Index(name = "idx_orders_pay_deadline_at", columnList = "pay_deadline_at"),
+                @Index(name = "idx_orders_confirm_deadline_at", columnList = "confirm_deadline_at"),
                 @Index(name = "idx_orders_created_at", columnList = "created_at")
         }
 )
@@ -48,11 +52,20 @@ public class Order {
     @Column(name = "merchant_id", nullable = false)
     private UUID merchantId;
 
+    @Column(name = "seller_id")
+    private UUID sellerId;
+
     @Column(name = "total_amount", nullable = false, precision = 18, scale = 2)
     private BigDecimal totalAmount;
 
     @Column(name = "pay_amount", nullable = false, precision = 18, scale = 2)
     private BigDecimal payAmount;
+
+    @Column(name = "seller_income_amount", precision = 18, scale = 2)
+    private BigDecimal sellerIncomeAmount;
+
+    @Column(name = "platform_income_amount", precision = 18, scale = 2)
+    private BigDecimal platformIncomeAmount;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "order_status", nullable = false, length = 32)
@@ -66,8 +79,35 @@ public class Order {
     @Column(name = "payment_method", length = 32)
     private PaymentMethod paymentMethod;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "fulfillment_type", length = 32)
+    private FulfillmentType fulfillmentType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "fulfillment_status", length = 32)
+    private FulfillmentStatus fulfillmentStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "settlement_status", length = 32)
+    private SettlementStatus settlementStatus;
+
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
+
+    @Column(name = "pay_deadline_at")
+    private LocalDateTime payDeadlineAt;
+
+    @Column(name = "closed_at")
+    private LocalDateTime closedAt;
+
+    @Column(name = "delivered_at")
+    private LocalDateTime deliveredAt;
+
+    @Column(name = "confirm_deadline_at")
+    private LocalDateTime confirmDeadlineAt;
+
+    @Column(name = "confirmed_at")
+    private LocalDateTime confirmedAt;
 
     @Column(name = "payment_request_no", length = 64, unique = true)
     private String paymentRequestNo;
@@ -98,11 +138,29 @@ public class Order {
         if (this.payAmount == null) {
             this.payAmount = BigDecimal.ZERO;
         }
+        if (this.sellerIncomeAmount == null) {
+            this.sellerIncomeAmount = BigDecimal.ZERO;
+        }
+        if (this.platformIncomeAmount == null) {
+            this.platformIncomeAmount = BigDecimal.ZERO;
+        }
         if (this.orderStatus == null) {
             this.orderStatus = OrderStatus.CREATED;
         }
         if (this.paymentStatus == null) {
             this.paymentStatus = PaymentStatus.UNPAID;
+        }
+        if (this.fulfillmentStatus == null) {
+            this.fulfillmentStatus = FulfillmentStatus.PENDING;
+        }
+        if (this.settlementStatus == null) {
+            this.settlementStatus = SettlementStatus.UNSETTLED;
+        }
+        if (this.payDeadlineAt == null) {
+            this.payDeadlineAt = now.plusMinutes(30);
+        }
+        if (this.sellerId == null && this.merchantId != null) {
+            this.sellerId = this.merchantId;
         }
         if (this.createdAt == null) {
             this.createdAt = now;
@@ -149,6 +207,14 @@ public class Order {
         this.merchantId = merchantId;
     }
 
+    public UUID getSellerId() {
+        return sellerId;
+    }
+
+    public void setSellerId(UUID sellerId) {
+        this.sellerId = sellerId;
+    }
+
     public BigDecimal getTotalAmount() {
         return totalAmount;
     }
@@ -163,6 +229,22 @@ public class Order {
 
     public void setPayAmount(BigDecimal payAmount) {
         this.payAmount = payAmount;
+    }
+
+    public BigDecimal getSellerIncomeAmount() {
+        return sellerIncomeAmount;
+    }
+
+    public void setSellerIncomeAmount(BigDecimal sellerIncomeAmount) {
+        this.sellerIncomeAmount = sellerIncomeAmount;
+    }
+
+    public BigDecimal getPlatformIncomeAmount() {
+        return platformIncomeAmount;
+    }
+
+    public void setPlatformIncomeAmount(BigDecimal platformIncomeAmount) {
+        this.platformIncomeAmount = platformIncomeAmount;
     }
 
     public OrderStatus getOrderStatus() {
@@ -189,6 +271,78 @@ public class Order {
         this.paymentMethod = paymentMethod;
     }
 
+    public FulfillmentType getFulfillmentType() {
+        return fulfillmentType;
+    }
+
+    public void setFulfillmentType(FulfillmentType fulfillmentType) {
+        this.fulfillmentType = fulfillmentType;
+    }
+
+    public FulfillmentStatus getFulfillmentStatus() {
+        return fulfillmentStatus;
+    }
+
+    public void setFulfillmentStatus(FulfillmentStatus fulfillmentStatus) {
+        this.fulfillmentStatus = fulfillmentStatus;
+    }
+
+    public SettlementStatus getSettlementStatus() {
+        return settlementStatus;
+    }
+
+    public void setSettlementStatus(SettlementStatus settlementStatus) {
+        this.settlementStatus = settlementStatus;
+    }
+
+    public LocalDateTime getPaidAt() {
+        return paidAt;
+    }
+
+    public void setPaidAt(LocalDateTime paidAt) {
+        this.paidAt = paidAt;
+    }
+
+    public LocalDateTime getPayDeadlineAt() {
+        return payDeadlineAt;
+    }
+
+    public void setPayDeadlineAt(LocalDateTime payDeadlineAt) {
+        this.payDeadlineAt = payDeadlineAt;
+    }
+
+    public LocalDateTime getClosedAt() {
+        return closedAt;
+    }
+
+    public void setClosedAt(LocalDateTime closedAt) {
+        this.closedAt = closedAt;
+    }
+
+    public LocalDateTime getDeliveredAt() {
+        return deliveredAt;
+    }
+
+    public void setDeliveredAt(LocalDateTime deliveredAt) {
+        this.deliveredAt = deliveredAt;
+    }
+
+    public LocalDateTime getConfirmDeadlineAt() {
+        return confirmDeadlineAt;
+    }
+
+    public void setConfirmDeadlineAt(LocalDateTime confirmDeadlineAt) {
+        this.confirmDeadlineAt = confirmDeadlineAt;
+    }
+
+    public LocalDateTime getConfirmedAt() {
+        return confirmedAt;
+    }
+
+    public void setConfirmedAt(LocalDateTime confirmedAt) {
+        this.confirmedAt = confirmedAt;
+    }
+
     public String getPaymentRequestNo() {
         return paymentRequestNo;
     }
@@ -203,14 +357,6 @@ public class Order {
 
     public void setChannelTradeNo(String channelTradeNo) {
         this.channelTradeNo = channelTradeNo;
-    }
-
-    public LocalDateTime getPaidAt() {
-        return paidAt;
-    }
-
-    public void setPaidAt(LocalDateTime paidAt) {
-        this.paidAt = paidAt;
     }
 
     public String getRemark() {

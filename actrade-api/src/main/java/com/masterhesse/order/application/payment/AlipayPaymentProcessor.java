@@ -5,6 +5,7 @@ import com.masterhesse.common.exception.BusinessException;
 import com.masterhesse.order.api.request.PaymentInitiateRequest;
 import com.masterhesse.order.domain.Order;
 import com.masterhesse.order.domain.PaymentMethod;
+import com.masterhesse.order.domain.PaymentStatus;
 import com.masterhesse.order.infrastructure.alipay.AlipayGatewayService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -52,6 +53,7 @@ public class AlipayPaymentProcessor implements PaymentProcessor {
 
         Map<String, String> channelData = new LinkedHashMap<>();
         channelData.put("gateway", "ALIPAY_PAGE");
+        channelData.put("appId", alipayGatewayService.getAppId());
         channelData.put("outTradeNo", outTradeNo);
         channelData.put("orderNo", order.getOrderNo());
         channelData.put("amount", payAmount.setScale(2, RoundingMode.HALF_UP).toPlainString());
@@ -130,5 +132,54 @@ public class AlipayPaymentProcessor implements PaymentProcessor {
             default ->
                     PaymentExecuteResult.failed(outTradeNo, query.getTradeNo(), "支付宝交易状态: " + tradeStatus);
         };
+    }
+
+    @Override
+    public PaymentQueryResult query(Order order) {
+        if (!StringUtils.hasText(order.getPaymentRequestNo())) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "支付宝交易查询失败：paymentRequestNo 为空");
+        }
+
+        AlipayTradeQueryResponse response = alipayGatewayService.queryTrade(order.getPaymentRequestNo());
+        String tradeStatus = response.getTradeStatus();
+        String tradeNo = response.getTradeNo();
+
+        return switch (tradeStatus) {
+            case "TRADE_SUCCESS", "TRADE_FINISHED" ->
+                    PaymentQueryResult.of(PaymentStatus.PAID, order.getPaymentRequestNo(), tradeNo, "支付宝交易已支付");
+
+            case "TRADE_CLOSED" ->
+                    PaymentQueryResult.of(PaymentStatus.CLOSED, order.getPaymentRequestNo(), tradeNo, "支付宝交易已关闭");
+
+            case "WAIT_BUYER_PAY" ->
+                    PaymentQueryResult.of(PaymentStatus.PAYING, order.getPaymentRequestNo(), tradeNo, "支付宝交易待支付");
+
+            default ->
+                    PaymentQueryResult.of(PaymentStatus.FAILED, order.getPaymentRequestNo(), tradeNo, "支付宝交易状态: " + tradeStatus);
+        };
+    }
+
+    @Override
+    public PaymentCloseResult close(Order order) {
+        if (!StringUtils.hasText(order.getPaymentRequestNo())) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "支付宝关单失败：paymentRequestNo 为空");
+        }
+
+        PaymentQueryResult queryResult = query(order);
+
+        if (queryResult.paymentStatus() == PaymentStatus.PAID) {
+            return PaymentCloseResult.paid("支付宝交易已支付，不能关单");
+        }
+
+        if (queryResult.paymentStatus() == PaymentStatus.CLOSED) {
+            return PaymentCloseResult.closed("支付宝交易已关闭");
+        }
+
+        alipayGatewayService.closeTrade(order.getPaymentRequestNo());
+
+        log.info("Alipay trade closed by processor. orderNo={}, paymentRequestNo={}",
+                order.getOrderNo(), order.getPaymentRequestNo());
+
+        return PaymentCloseResult.closed("支付宝交易已关闭");
     }
 }

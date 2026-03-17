@@ -54,7 +54,7 @@ public class OrderController {
     @PostMapping("/{orderId}/pay")
     public ApiResponse<OrderResponse> payOrder(@PathVariable UUID orderId,
                                                @Valid @RequestBody PayOrderRequest request) {
-        return ApiResponse.success(orderPaymentService.payOrder(orderId, request));
+        return ApiResponse.success(orderService.payOrder(orderId, request));
     }
 
     /**
@@ -79,6 +79,25 @@ public class OrderController {
     @PostMapping("/{orderId}/confirm-receipt")
     public ApiResponse<OrderResponse> confirmReceipt(@PathVariable UUID orderId) {
         return ApiResponse.success(orderService.confirmReceipt(orderId));
+    }
+
+    /**
+     * 手动补建待结算记录
+     * 适用于：
+     * 1. 订单已完成但结算单没创建
+     * 2. 历史数据修复
+     */
+    @PostMapping("/{orderId}/settlement/prepare")
+    public ApiResponse<OrderResponse> prepareSettlement(@PathVariable UUID orderId) {
+        return ApiResponse.success(orderService.prepareSettlement(orderId));
+    }
+
+    /**
+     * 手动标记订单结算完成
+     */
+    @PostMapping("/{orderId}/settlement/settle")
+    public ApiResponse<OrderResponse> markSettlementSettled(@PathVariable UUID orderId) {
+        return ApiResponse.success(orderService.markSettlementSettled(orderId));
     }
 
     @GetMapping("/{orderId}")

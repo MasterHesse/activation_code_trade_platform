@@ -6,6 +6,7 @@ import com.masterhesse.order.api.request.PayOrderRequest;
 import com.masterhesse.order.api.request.PaymentInitiateRequest;
 import com.masterhesse.order.api.response.OrderResponse;
 import com.masterhesse.order.api.response.PaymentInitiateResponse;
+import com.masterhesse.order.application.event.OrderPaidEvent;
 import com.masterhesse.order.application.payment.PaymentExecuteResult;
 import com.masterhesse.order.application.payment.PaymentProcessor;
 import com.masterhesse.order.application.payment.PaymentProcessorFactory;
@@ -17,6 +18,7 @@ import com.masterhesse.order.domain.PaymentStatus;
 import com.masterhesse.order.persistence.OrderItemRepository;
 import com.masterhesse.order.persistence.OrderRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,13 +42,16 @@ public class OrderPaymentService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final PaymentProcessorFactory paymentProcessorFactory;
+    private final ApplicationEventPublisher eventPublisher;
 
     public OrderPaymentService(OrderRepository orderRepository,
                                OrderItemRepository orderItemRepository,
-                               PaymentProcessorFactory paymentProcessorFactory) {
+                               PaymentProcessorFactory paymentProcessorFactory,
+                               ApplicationEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.paymentProcessorFactory = paymentProcessorFactory;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -107,9 +112,12 @@ public class OrderPaymentService {
         PaymentProcessor processor = paymentProcessorFactory.getProcessor(request.getPaymentMethod());
         PaymentExecuteResult result = processor.initiate(order, request);
 
-        applyPaymentResult(order, result);
-
+        boolean paidJustNow = applyPaymentResult(order, result);
         Order savedOrder = orderRepository.saveAndFlush(order);
+
+        if (paidJustNow) {
+            eventPublisher.publishEvent(new OrderPaidEvent(savedOrder.getOrderId()));
+        }
 
         log.info("Payment initiated. orderId={}, orderNo={}, paymentMethod={}, paymentRequestNo={}, paymentStatus={}",
                 savedOrder.getOrderId(),
@@ -146,16 +154,29 @@ public class OrderPaymentService {
                 return "success";
             }
 
+            if (order.getOrderStatus() == OrderStatus.CANCELED) {
+                log.warn("Alipay notify ignored because order already canceled. orderNo={}, paymentRequestNo={}",
+                        order.getOrderNo(), order.getPaymentRequestNo());
+                return "success";
+            }
+
             order.setPaymentMethod(PaymentMethod.ALIPAY);
 
             PaymentProcessor processor = paymentProcessorFactory.getProcessor(PaymentMethod.ALIPAY);
             PaymentExecuteResult result = processor.handleCallback(order, params);
 
-            applyPaymentResult(order, result);
-            orderRepository.saveAndFlush(order);
+            boolean paidJustNow = applyPaymentResult(order, result);
+            Order savedOrder = orderRepository.saveAndFlush(order);
+
+            if (paidJustNow) {
+                eventPublisher.publishEvent(new OrderPaidEvent(savedOrder.getOrderId()));
+            }
 
             log.info("Alipay notify handled. orderNo={}, paymentRequestNo={}, paymentStatus={}, channelTradeNo={}",
-                    order.getOrderNo(), order.getPaymentRequestNo(), order.getPaymentStatus(), order.getChannelTradeNo());
+                    savedOrder.getOrderNo(),
+                    savedOrder.getPaymentRequestNo(),
+                    savedOrder.getPaymentStatus(),
+                    savedOrder.getChannelTradeNo());
 
             return "success";
         } catch (Exception ex) {
@@ -178,18 +199,34 @@ public class OrderPaymentService {
                     "当前订单状态不允许支付: " + order.getOrderStatus());
         }
 
+        if (order.getPaymentStatus() == PaymentStatus.CLOSED) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "已关闭订单不允许支付");
+        }
+
+        if (order.getPaymentStatus() == PaymentStatus.REFUNDED) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "已退款订单不允许重新支付");
+        }
+
+        if (order.getPayDeadlineAt() != null && !order.getPayDeadlineAt().isAfter(LocalDateTime.now())) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "订单已超出支付时效");
+        }
+
         if (order.getPayAmount() == null || order.getPayAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "订单支付金额必须大于 0");
         }
     }
 
-    private void applyPaymentResult(Order order, PaymentExecuteResult result) {
+    private boolean applyPaymentResult(Order order, PaymentExecuteResult result) {
         if (StringUtils.hasText(result.getPaymentRequestNo())) {
             order.setPaymentRequestNo(result.getPaymentRequestNo());
         }
         if (StringUtils.hasText(result.getChannelTradeNo())) {
             order.setChannelTradeNo(result.getChannelTradeNo());
         }
+
+        boolean paidJustNow =
+                order.getPaymentStatus() != PaymentStatus.PAID
+                        && result.getPaymentStatus() == PaymentStatus.PAID;
 
         switch (result.getPaymentStatus()) {
             case PAYING -> order.setPaymentStatus(PaymentStatus.PAYING);
@@ -203,10 +240,23 @@ public class OrderPaymentService {
             }
 
             case FAILED -> order.setPaymentStatus(PaymentStatus.FAILED);
-            case CLOSED -> order.setPaymentStatus(PaymentStatus.CLOSED);
+
+            case CLOSED -> {
+                order.setPaymentStatus(PaymentStatus.CLOSED);
+                if (order.getOrderStatus() == OrderStatus.CREATED) {
+                    order.setOrderStatus(OrderStatus.CANCELED);
+                }
+                if (order.getClosedAt() == null) {
+                    order.setClosedAt(LocalDateTime.now());
+                }
+            }
+
             case REFUNDED -> order.setPaymentStatus(PaymentStatus.REFUNDED);
+
             case UNPAID -> order.setPaymentStatus(PaymentStatus.UNPAID);
         }
+
+        return paidJustNow;
     }
 
     private String generatePaymentRequestNo() {
