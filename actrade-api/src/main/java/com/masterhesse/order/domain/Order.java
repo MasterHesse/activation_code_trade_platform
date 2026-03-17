@@ -138,12 +138,12 @@ public class Order {
         if (this.payAmount == null) {
             this.payAmount = BigDecimal.ZERO;
         }
-        if (this.sellerIncomeAmount == null) {
-            this.sellerIncomeAmount = BigDecimal.ZERO;
-        }
-        if (this.platformIncomeAmount == null) {
-            this.platformIncomeAmount = BigDecimal.ZERO;
-        }
+        // if (this.sellerIncomeAmount == null) {
+        //     this.sellerIncomeAmount = BigDecimal.ZERO;
+        // }
+        // if (this.platformIncomeAmount == null) {
+        //     this.platformIncomeAmount = BigDecimal.ZERO;
+        // }
         if (this.orderStatus == null) {
             this.orderStatus = OrderStatus.CREATED;
         }
