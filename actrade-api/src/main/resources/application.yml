@@ -4,8 +4,8 @@ server:
 spring:
   config:
     import:
-      - optional:file:../infra/.env[.properties]
-      - optional:file:./infra/.env[.properties]
+      - optional:file:../infra/api.env[.properties]
+      - optional:file:./infra/api.env[.properties]
 
   application:
     name: ${APP_NAME:actrade-api}

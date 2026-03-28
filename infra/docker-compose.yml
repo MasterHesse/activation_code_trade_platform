@@ -70,6 +70,24 @@ services:
     networks:
       - actrade-dev
 
+  minio:
+    container_name: actrade-minio
+    hostname: actrade-minio
+    image: minio/minio:latest
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - actrade-dev
+
 networks:
   actrade-dev:
     name: actrade-dev-network
@@ -82,3 +100,5 @@ volumes:
     name: actrade-redis-data
   rabbitmq_data:
     name: actrade-rabbitmq-data
+  minio_data:
+    name: actrade-minio-data
