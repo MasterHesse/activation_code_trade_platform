@@ -1,0 +1,6 @@
+#NOTE: This is a Maven Resolver internal implementation file, its format can be changed without prior notice.
+#Tue Apr 07 19:51:48 CST 2026
+micrometer-commons-1.15.9.jar>aliyun=
+micrometer-commons-1.15.9.jar>apache=
+micrometer-commons-1.15.9.pom>aliyun=
+micrometer-commons-1.15.9.pom>apache=

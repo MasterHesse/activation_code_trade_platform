@@ -10,6 +10,7 @@ import com.masterhesse.product.persistence.ProductDetailRepository;
 import com.masterhesse.product.persistence.ProductRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -50,8 +52,17 @@ public class ProductService {
     }
 
     public Page<Product> list(UUID merchantId, UUID categoryId, ProductStatus status, Pageable pageable) {
+        Page<Product> result;
         if (merchantId != null) {
-            return productRepository.findByMerchantId(merchantId, pageable);
+            result = productRepository.findByMerchantId(merchantId, pageable);
+            log.debug("查询商家商品 - merchantId: {}, 结果数量: {}", merchantId, result.getContent().size());
+            // 打印第一个商品的库存用于调试
+            if (!result.getContent().isEmpty()) {
+                Product first = result.getContent().get(0);
+                log.debug("第一个商品 - productId: {}, name: {}, stockCount: {}",
+                        first.getProductId(), first.getName(), first.getStockCount());
+            }
+            return result;
         }
         if (categoryId != null) {
             return productRepository.findByCategoryId(categoryId, pageable);
@@ -66,23 +77,56 @@ public class ProductService {
     public Product update(UUID productId, Product incoming) {
         Product existing = getById(productId);
 
-        if (!productCategoryRepository.existsById(incoming.getCategoryId())) {
-            throw new IllegalArgumentException("商品分类不存在: " + incoming.getCategoryId());
+        // 记录更新前的库存值，用于调试
+        Integer oldStockCount = existing.getStockCount();
+
+        // 只更新非空字段（支持部分更新）
+        if (incoming.getCategoryId() != null) {
+            if (!productCategoryRepository.existsById(incoming.getCategoryId())) {
+                throw new IllegalArgumentException("商品分类不存在: " + incoming.getCategoryId());
+            }
+            existing.setCategoryId(incoming.getCategoryId());
+        }
+        if (incoming.getName() != null) {
+            existing.setName(incoming.getName());
+        }
+        if (incoming.getSubtitle() != null) {
+            existing.setSubtitle(incoming.getSubtitle());
+        }
+        if (incoming.getDescription() != null) {
+            existing.setDescription(incoming.getDescription());
+        }
+        if (incoming.getCoverImage() != null) {
+            existing.setCoverImage(incoming.getCoverImage());
+        }
+        if (incoming.getDeliveryMode() != null) {
+            existing.setDeliveryMode(incoming.getDeliveryMode());
+        }
+        if (incoming.getPrice() != null) {
+            existing.setPrice(incoming.getPrice());
+        }
+        if (incoming.getOriginalPrice() != null) {
+            existing.setOriginalPrice(incoming.getOriginalPrice());
+        }
+        if (incoming.getStatus() != null) {
+            existing.setStatus(incoming.getStatus());
+        }
+        // 注意：stockCount 和 salesCount 不在部分更新范围内，保持原值
+        // 只有明确传递了新值才更新
+        if (incoming.getStockCount() != null) {
+            existing.setStockCount(incoming.getStockCount());
+        }
+        if (incoming.getSalesCount() != null) {
+            existing.setSalesCount(incoming.getSalesCount());
         }
 
-        existing.setCategoryId(incoming.getCategoryId());
-        existing.setName(incoming.getName());
-        existing.setSubtitle(incoming.getSubtitle());
-        existing.setDescription(incoming.getDescription());
-        existing.setCoverImage(incoming.getCoverImage());
-        existing.setDeliveryMode(incoming.getDeliveryMode());
-        existing.setPrice(incoming.getPrice());
-        existing.setOriginalPrice(incoming.getOriginalPrice());
-        existing.setStatus(incoming.getStatus());
-        existing.setStockCount(incoming.getStockCount() == null ? 0 : incoming.getStockCount());
-        existing.setSalesCount(incoming.getSalesCount() == null ? 0 : incoming.getSalesCount());
+        Product saved = productRepository.save(existing);
 
-        return productRepository.save(existing);
+        // 记录更新后的库存值，用于调试
+        log.debug("商品更新 - productId: {}, 更新前stockCount: {}, 更新后stockCount: {}, 传入stockCount: {}",
+                productId, oldStockCount, saved.getStockCount(), incoming.getStockCount());
+
+        return saved;
     }
 
     @Transactional
@@ -104,7 +148,7 @@ public class ProductService {
         }
 
         return productDetailRepository.findById(productId)
-                .orElseThrow(() -> new EntityNotFoundException("商品详情不存在: " + productId));
+                .orElse(null); // 商品详情可选，不存在时返回 null 而不是抛异常
     }
 
     @Transactional

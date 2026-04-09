@@ -147,6 +147,7 @@ public class UserService {
         }
     }
 
+    @SuppressWarnings("removal")
     private Specification<AppUser> buildSpec(String keyword, UserRole role, UserStatus status) {
         Specification<AppUser> spec = Specification.where(AppUserSpecifications.notDeleted());
 

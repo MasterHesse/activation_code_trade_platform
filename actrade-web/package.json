@@ -1,0 +1,36 @@
+{
+  "name": "actrade-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
+    "format": "prettier --write src/"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+    "axios": "^1.9.0",
+    "dayjs": "^1.11.13",
+    "element-plus": "^2.9.7",
+    "js-cookie": "^3.0.5",
+    "pinia": "^3.0.2",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.26.0",
+    "@types/js-cookie": "^3.0.6",
+    "@types/node": "^22.15.18",
+    "@vitejs/plugin-vue": "^5.2.3",
+    "eslint": "^9.26.0",
+    "eslint-plugin-vue": "^10.1.0",
+    "prettier": "^3.5.3",
+    "sass-embedded": "^1.99.0",
+    "typescript": "~5.7.3",
+    "vite": "^6.3.4",
+    "vue-tsc": "^2.2.10"
+  }
+}

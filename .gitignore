@@ -18,6 +18,8 @@ logs/
 # Env files
 .env
 **/.env
+api.env
+runner.env
 
 # Spring
 application-local.yml

@@ -1,5 +1,6 @@
 package com.masterhesse.product.api;
 
+import com.masterhesse.common.api.ApiResponse;
 import com.masterhesse.product.api.request.CreateProductRequest;
 import com.masterhesse.product.api.request.UpdateProductRequest;
 import com.masterhesse.product.api.request.UpsertProductDetailRequest;
@@ -11,6 +12,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -68,8 +71,8 @@ public class ProductController {
                 .price(request.price())
                 .originalPrice(request.originalPrice())
                 .status(request.status())
-                .stockCount(request.stockCount() == null ? 0 : request.stockCount())
-                .salesCount(request.salesCount() == null ? 0 : request.salesCount())
+                .stockCount(request.stockCount())
+                .salesCount(request.salesCount())
                 .build();
 
         return productService.update(productId, product);
@@ -81,8 +84,13 @@ public class ProductController {
     }
 
     @GetMapping("/{productId}/detail")
-    public ProductDetail getDetail(@PathVariable UUID productId) {
-        return productService.getDetail(productId);
+    public ResponseEntity<ApiResponse<ProductDetail>> getDetail(@PathVariable UUID productId) {
+        ProductDetail detail = productService.getDetail(productId);
+        if (detail == null) {
+            // 商品详情不存在时返回 null，不抛异常
+            return ResponseEntity.ok(ApiResponse.<ProductDetail>success(null, null));
+        }
+        return ResponseEntity.ok(ApiResponse.success(detail));
     }
 
     @PutMapping("/{productId}/detail")

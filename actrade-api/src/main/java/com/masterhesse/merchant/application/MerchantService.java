@@ -36,9 +36,12 @@ public class MerchantService {
                 .orElseThrow(() -> new EntityNotFoundException("商家不存在: " + merchantId));
     }
 
+    /**
+     * 根据用户ID获取商家信息
+     * @return 商家信息，如果不存在则返回 null
+     */
     public Merchant getByUserId(UUID userId) {
-        return merchantRepository.findByUserId(userId)
-                .orElseThrow(() -> new EntityNotFoundException("用户未关联商家: " + userId));
+        return merchantRepository.findByUserId(userId).orElse(null);
     }
 
     public List<Merchant> listAll() {
@@ -70,5 +73,16 @@ public class MerchantService {
             throw new EntityNotFoundException("商家不存在: " + merchantId);
         }
         merchantRepository.deleteById(merchantId);
+    }
+
+    /**
+     * 审核商家（仅更新审核状态和备注）
+     */
+    @Transactional
+    public Merchant audit(UUID merchantId, MerchantAuditStatus auditStatus, String auditRemark) {
+        Merchant existing = getById(merchantId);
+        existing.setAuditStatus(auditStatus);
+        existing.setAuditRemark(auditRemark);
+        return merchantRepository.save(existing);
     }
 }

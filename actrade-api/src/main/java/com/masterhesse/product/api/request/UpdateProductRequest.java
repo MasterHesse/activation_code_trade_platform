@@ -3,18 +3,17 @@ package com.masterhesse.product.api.request;
 import com.masterhesse.product.domain.DeliveryMode;
 import com.masterhesse.product.domain.ProductStatus;
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.util.UUID;
 
+/**
+ * 商品更新请求 - 支持部分字段更新
+ */
 public record UpdateProductRequest(
-        @NotNull
         UUID categoryId,
 
-        @NotBlank
         @Size(max = 128)
         String name,
 
@@ -26,17 +25,14 @@ public record UpdateProductRequest(
         @Size(max = 255)
         String coverImage,
 
-        @NotNull
         DeliveryMode deliveryMode,
 
-        @NotNull
         @DecimalMin(value = "0.00")
         BigDecimal price,
 
         @DecimalMin(value = "0.00")
         BigDecimal originalPrice,
 
-        @NotNull
         ProductStatus status,
 
         Integer stockCount,

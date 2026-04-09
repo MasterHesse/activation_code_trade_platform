@@ -10,4 +10,6 @@ import java.util.UUID;
 public interface FileAssetRepository extends JpaRepository<FileAsset, UUID> {
 
     Optional<FileAsset> findByChecksumSha256(String checksumSha256);
+    Optional<FileAsset> findByFileId(UUID fileId);
+
 }

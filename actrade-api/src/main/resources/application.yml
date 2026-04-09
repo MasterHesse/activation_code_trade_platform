@@ -87,6 +87,15 @@ payment:
     subject-prefix: ${ALIPAY_SUBJECT_PREFIX:Actrade订单}
     ignore-ssl: false
 
+# JWT 安全配置
+security:
+  jwt:
+    secret: ${JWT_SECRET:actrade-jwt-secret-key-must-be-at-least-32-characters-long-for-hs256}
+    access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION:1800000}  # 30 minutes
+    refresh-token-expiration-ms: ${JWT_REFRESH_EXPIRATION:604800000}  # 7 days
+  internal:
+    token: ${INTERNAL_SERVICE_TOKEN:actrade-internal-token-change-in-production}
+
 logging:
   level:
     root: INFO

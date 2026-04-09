@@ -34,17 +34,37 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
+      base-path: /actuator
   endpoint:
     health:
       probes:
         enabled: true
       show-details: always
+      group:
+        liveness:
+          include: livenessState,docker,rabbitMQ
+        readiness:
+          include: readinessState,minio
   health:
     livenessstate:
       enabled: true
     readinessstate:
       enabled: true
+    docker:
+      enabled: true
+    rabbitMQ:
+      enabled: true
+    minio:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.90, 0.95, 0.99
 
 logging:
   level:
@@ -81,6 +101,13 @@ minio:
   access-key: ${MINIO_ACCESS_KEY:minioadmin}
   secret-key: ${MINIO_SECRET_KEY:minioadmin}
   bucket-artifacts: ${MINIO_BUCKET_ARTIFACTS:activation-artifacts}
+  bucket-results: ${MINIO_BUCKET_RESULTS:activation-results}
+  download-timeout-seconds: ${MINIO_DOWNLOAD_TIMEOUT:300}
+  buffer-size: ${MINIO_BUFFER_SIZE:8192}
+  checksum-enabled: ${MINIO_CHECKSUM_ENABLED:true}
+  upload-buffer-size: ${MINIO_UPLOAD_BUFFER_SIZE:8192}
+  upload-timeout-seconds: ${MINIO_UPLOAD_TIMEOUT:300}
+  auto-create-bucket: ${MINIO_AUTO_CREATE_BUCKET:true}
 
 docker:
   binary: ${DOCKER_BINARY:docker}
@@ -92,3 +119,23 @@ docker:
   pids-limit: ${DOCKER_PIDS_LIMIT:128}
   image:
     shell: ${DOCKER_IMAGE_SHELL:activation-runner-shell:latest}
+    pull-timeout-seconds: ${DOCKER_IMAGE_PULL_TIMEOUT:300}
+    prewarm-strategy: ${DOCKER_IMAGE_PREWARM_STRATEGY:on-demand}
+  gvisor:
+    enabled: ${GVISOR_ENABLED:true}
+    runsc-path: ${GVISOR_RUNSC_PATH:/usr/local/bin/runsc}
+    sandbox-type: ${GVISOR_SANDBOX_TYPE:application}
+    file-system-type: ${GVISOR_FS_TYPE:overlay}
+    debug: ${GVISOR_DEBUG:false}
+    debug-log-path: ${GVISOR_DEBUG_LOG:/var/log/runsc}
+    log-format: ${GVISOR_LOG_FORMAT:text}
+    trace-syscall: ${GVISOR_TRACE_SYSCALL:false}
+    trace-file: ${GVISOR_TRACE_FILE:/var/log/runsc_syscall}
+    network-mode: ${GVISOR_NETWORK_MODE:sandboxed}
+    seccomp-enabled: ${GVISOR_SECCOMP_ENABLED:true}
+    seccomp-profile: ${GVISOR_SECCOMP_PROFILE:}
+    disable-host-sharing: ${GVISOR_DISABLE_HOST_SHARING:true}
+    heartbeat-interval-ms: ${GVISOR_HEARTBEAT_MS:10000}
+    max-start-time-ms: ${GVISOR_MAX_START_MS:30000}
+    test-mode-enabled: ${GVISOR_TEST_MODE:false}
+    warning-action: ${GVISOR_WARNING_ACTION:log}

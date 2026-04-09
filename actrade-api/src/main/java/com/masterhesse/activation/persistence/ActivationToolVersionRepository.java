@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ActivationToolVersionRepository extends JpaRepository<ActivationToolVersion, UUID> {
@@ -17,4 +18,6 @@ public interface ActivationToolVersionRepository extends JpaRepository<Activatio
     long countByTool_ToolId(UUID toolId);
 
     boolean existsByFile_FileId(UUID fileId);
+
+    Optional<ActivationToolVersion> findByToolVersionId(UUID toolVersionId);
 }

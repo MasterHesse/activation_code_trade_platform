@@ -32,4 +32,9 @@ public interface ActivationTaskRepository extends JpaRepository<ActivationTask, 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from ActivationTask t where t.id = :id")
     Optional<ActivationTask> findByIdForUpdate(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select t from ActivationTask t where t.taskNo = :taskNo")
+    Optional<ActivationTask> findByTaskNoForUpdate(@Param("taskNo") String taskNo);
+
 }

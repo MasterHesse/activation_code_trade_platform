@@ -1,0 +1,6 @@
+#NOTE: This is a Maven Resolver internal implementation file, its format can be changed without prior notice.
+#Tue Apr 07 19:51:48 CST 2026
+jackson-annotations-2.19.4.jar>aliyun=
+jackson-annotations-2.19.4.jar>apache=
+jackson-annotations-2.19.4.pom>aliyun=
+jackson-annotations-2.19.4.pom>apache=
