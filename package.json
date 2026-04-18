@@ -1,0 +1,24 @@
+{
+  "name": "activation_code_trade_platform",
+  "version": "1.0.0",
+  "description": "> A modern activation-code / digital-goods trading platform built with Spring Boot and PostgreSQL.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasterHesse/activation_code_trade_platform.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/MasterHesse/activation_code_trade_platform/issues"
+  },
+  "homepage": "https://github.com/MasterHesse/activation_code_trade_platform#readme",
+  "dependencies": {
+    "playwright": "^1.59.1"
+  }
+}

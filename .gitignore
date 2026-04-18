@@ -29,3 +29,5 @@ scratch/
 
 *.crt
 /certs/*
+node_modules
+.gitignore

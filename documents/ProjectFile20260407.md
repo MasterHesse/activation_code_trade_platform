@@ -1002,3 +1002,61 @@ psql -h localhost -U actrade -d actrade -c "SELECT product_id, COUNT(*) FROM act
 | P1 | 验证激活码分配逻辑 | 检查库存扣减和激活码生成 |
 | P1 | 检查 MQ 消息投递 | 确认激活任务消息正确发送 |
 | P2 | 前端发货状态展示 | 优化用户查看发货进度体验 |
+
+---
+
+## 十五、M6 电商闭环测试 🔄 进行中 (2026-04-18)
+
+### 15.1 测试目标
+
+验证完整电商闭环流程：
+1. 普通用户注册 → 申请入驻商家 → 管理员审核
+2. 商家创建激活码类型商品 → 上传库存激活码 → 上架商品
+3. 买家注册购买 → 支付宝支付 → 系统自动发货
+4. 平台自动分配款项给商家
+
+### 15.2 测试进度
+
+| 步骤 | 功能 | 状态 | 详情 |
+|------|------|------|------|
+| 1 | 普通用户注册 | ✅ 完成 | 用户: ukbhqq4041sandbox, ID: 0dfca2e7-8ab3-41d0-ac00-399ce307a246 |
+| 2 | 申请入驻商家 | ✅ 完成 | Merchant ID: daf83958-4beb-4ebb-bb7e-7419afec6100 |
+| 3 | 管理员审核通过 | ✅ 完成 | 状态: APPROVED |
+| 4 | 创建激活码商品 | ✅ 完成 | Product ID: 9d7d4ca7-5c1c-4ee1-980a-c6ac4f175ab8 |
+| 5 | 上传激活码库存 | ✅ 完成 | 4个激活码上传成功 |
+| 6 | 上架商品 | ✅ 完成 | Status: ONLINE |
+| 7 | 买家购买 | ✅ 完成 | Order ID: d578c3d4-be49-40a2-aa33-cbe7c07e4ae1 |
+| 8 | 支付宝支付 | ✅ 完成 | PaymentRequestNo: PAY20260418142048853922 |
+| 9 | 自动发货 | ✅ 完成 | fulfillmentStatus: SUCCESS, CODE-001已分配 |
+| 10 | 确认收货 | ✅ 完成 | OrderStatus: COMPLETED |
+| 11 | 款项分配 | ✅ 完成 | SettlementAmount: 9.99, Status: UNSETTLED |
+
+### 15.3 完整电商闭环验证结果 (2026-04-18)
+
+```
+订单信息:
+- Order ID: d578c3d4-be49-40a2-aa33-cbe7c07e4ae1
+- Order No: ORD20260418142040966279
+- Total Amount: 9.99
+- Payment Status: PAID
+- Order Status: DELIVERING → COMPLETED
+- Fulfillment Status: SUCCESS
+
+激活码分配:
+- Code ID: 6d1d072f-3fbb-496a-96de-9f5003dfc952
+- Code Value: CODE-001 (masked)
+- Status: SOLD
+
+结算记录:
+- Settlement ID: 984854f8-0bcb-4902-89ea-7dd6283d3ff3
+- Settlement Amount: 9.99
+- Settlement Status: UNSETTLED
+- Merchant ID: daf83958-4beb-4ebb-bb7e-7419afec6100
+```
+
+### 15.4 已修复问题
+
+| 问题 | 解决方案 |
+|------|---------|
+| 403 权限错误 | `/api/admin/**` 改为 `authenticated()` 由 Service 层校验 |
+| 沙箱支付回调无法模拟 | 添加测试API: `/api/payments/alipay/test/simulate-success` |
