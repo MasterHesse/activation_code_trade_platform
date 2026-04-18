@@ -62,7 +62,7 @@ public class SecurityConfig {
                         .requestMatchers("/internal/**").hasRole("INTERNAL")
 
                         // 管理员接口
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/admin/**").authenticated()
 
                         // 商户接口
                         .requestMatchers("/api/merchant/**").hasAnyRole("MERCHANT", "ADMIN")

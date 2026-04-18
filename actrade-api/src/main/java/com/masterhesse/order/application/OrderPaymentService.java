@@ -185,6 +185,62 @@ public class OrderPaymentService {
         }
     }
 
+    /**
+     * 测试用：模拟支付成功（跳过签名验证）
+     * 仅用于开发/测试环境
+     */
+    @Transactional
+    public String simulatePaymentSuccess(String paymentRequestNo, String tradeNo, String totalAmount) {
+        try {
+            if (!StringUtils.hasText(paymentRequestNo)) {
+                log.warn("Simulate payment missing paymentRequestNo");
+                return "failure";
+            }
+
+            Order order = orderRepository.findByPaymentRequestNoForUpdate(paymentRequestNo).orElse(null);
+            if (order == null) {
+                log.warn("Simulate payment order not found, paymentRequestNo={}", paymentRequestNo);
+                return "failure";
+            }
+
+            if (order.getPaymentStatus() == PaymentStatus.PAID) {
+                log.info("Simulate payment ignored because order already paid. orderNo={}, paymentRequestNo={}",
+                        order.getOrderNo(), order.getPaymentRequestNo());
+                return "success";
+            }
+
+            if (order.getOrderStatus() == OrderStatus.CANCELED) {
+                log.warn("Simulate payment ignored because order already canceled. orderNo={}, paymentRequestNo={}",
+                        order.getOrderNo(), order.getPaymentRequestNo());
+                return "success";
+            }
+
+            order.setPaymentMethod(PaymentMethod.ALIPAY);
+            order.setChannelTradeNo(tradeNo);
+            order.setPaymentStatus(PaymentStatus.PAID);
+            order.setOrderStatus(OrderStatus.PAID);
+            if (order.getPaidAt() == null) {
+                order.setPaidAt(LocalDateTime.now());
+            }
+
+            Order savedOrder = orderRepository.saveAndFlush(order);
+
+            // 发布支付成功事件，触发自动发货
+            eventPublisher.publishEvent(new OrderPaidEvent(savedOrder.getOrderId()));
+
+            log.info("Simulate payment success. orderNo={}, paymentRequestNo={}, paymentStatus={}, channelTradeNo={}",
+                    savedOrder.getOrderNo(),
+                    savedOrder.getPaymentRequestNo(),
+                    savedOrder.getPaymentStatus(),
+                    savedOrder.getChannelTradeNo());
+
+            return "success";
+        } catch (Exception ex) {
+            log.error("Simulate payment failed, paymentRequestNo={}", paymentRequestNo, ex);
+            return "failure";
+        }
+    }
+
     private void validateCanPay(Order order, PaymentMethod paymentMethod) {
         if (paymentMethod == null) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "paymentMethod 不能为空");

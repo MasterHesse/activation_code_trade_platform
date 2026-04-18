@@ -35,11 +35,11 @@ const paymentStatusMap: Record<string, { label: string; type: string }> = {
   'REFUNDED': { label: '已退款', type: 'danger' }
 }
 
-// 履约状态配置
+// 履约状态配置（用于订单整体发货状态）
 const fulfillmentStatusMap: Record<string, { label: string; type: string }> = {
   'PENDING': { label: '待处理', type: 'warning' },
   'PROCESSING': { label: '处理中', type: 'primary' },
-  'SUCCESS': { label: '成功', type: 'success' },
+  'SUCCESS': { label: '已发货', type: 'success' },
   'FAILED': { label: '失败', type: 'danger' }
 }
 
@@ -54,6 +54,33 @@ const paymentMethodMap: Record<string, { label: string }> = {
 const deliveryModeMap: Record<string, { label: string }> = {
   'CODE_STOCK': { label: '卡密发货' },
   'TOOL_EXECUTION': { label: '自动激活' }
+}
+
+// 获取发货状态标签（使用 fulfillmentStatus）
+const getDeliveryStatusLabel = (orderStatus?: string, fulfillmentStatus?: string) => {
+  // 根据订单状态判断发货状态
+  if (orderStatus === 'COMPLETED') return '已完成'
+  if (orderStatus === 'DELIVERING') {
+    if (fulfillmentStatus === 'SUCCESS') return '已发货'
+    if (fulfillmentStatus === 'PROCESSING') return '发货中'
+    if (fulfillmentStatus === 'FAILED') return '发货失败'
+    return '待发货'
+  }
+  if (orderStatus === 'PAID') return '待发货'
+  return '待处理'
+}
+
+// 获取发货状态类型
+const getDeliveryStatusType = (orderStatus?: string, fulfillmentStatus?: string) => {
+  if (orderStatus === 'COMPLETED') return 'success'
+  if (orderStatus === 'DELIVERING') {
+    if (fulfillmentStatus === 'SUCCESS') return 'success'
+    if (fulfillmentStatus === 'PROCESSING') return 'primary'
+    if (fulfillmentStatus === 'FAILED') return 'danger'
+    return 'warning'
+  }
+  if (orderStatus === 'PAID') return 'info'
+  return 'info'
 }
 
 // 计算属性
@@ -83,20 +110,20 @@ const stepIndex = computed(() => {
 const loadOrder = async () => {
   loading.value = true
   try {
-    // axios 拦截器返回 response.data，结构为 { code, message, data: Order }
+    // axios 拦截器返回 response.data，结构为 { code: 200, message, data: Order }
     const response = await orderApi.getById(orderId) as unknown as { code?: number; message?: string; data?: Order }
-    if (response?.code === 0 && response?.data) {
+    if (response?.code === 200 && response?.data) {
       order.value = response.data
     } else {
-      ElMessage.error('订单不存在')
+      ElMessage.error(response?.message || '订单不存在')
       router.push('/orders')
     }
   } catch (e: unknown) {
-    const err = e as { response?: { status?: number } }
+    const err = e as { response?: { status?: number; data?: { message?: string } } }
     if (err.response?.status === 404) {
       ElMessage.error('订单不存在')
     } else {
-      ElMessage.error('加载订单详情失败')
+      ElMessage.error(err.response?.data?.message || '加载订单详情失败')
     }
     router.push('/orders')
   } finally {
@@ -129,7 +156,7 @@ const handlePay = async () => {
       }
     }
 
-    if (response?.code !== 0 || !response?.data) {
+    if (response?.code !== 200 || !response?.data) {
       ElMessage.error(response?.message || '支付发起失败')
       return
     }
@@ -291,10 +318,9 @@ onMounted(() => {
                   {{ order.items?.[0]?.deliveryMode ? deliveryModeMap[order.items[0].deliveryMode]?.label || order.items[0].deliveryMode : '-' }}
                 </el-descriptions-item>
                 <el-descriptions-item label="发货状态">
-                  <el-tag v-if="currentFulfillmentStatus" :type="currentFulfillmentStatus.type" size="small">
-                    {{ currentFulfillmentStatus.label }}
+                  <el-tag :type="getDeliveryStatusType(order.orderStatus, order.fulfillmentStatus)" size="small">
+                    {{ getDeliveryStatusLabel(order.orderStatus, order.fulfillmentStatus) }}
                   </el-tag>
-                  <span v-else>-</span>
                 </el-descriptions-item>
                 <el-descriptions-item label="结算状态" :span="2">
                   <el-tag :type="order.settlementStatus === 'SETTLED' ? 'success' : 'info'" size="small">
@@ -317,6 +343,13 @@ onMounted(() => {
                 <el-table-column label="发货方式" width="100">
                   <template #default="{ row }">
                     {{ deliveryModeMap[row.deliveryMode]?.label || row.deliveryMode }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="发货状态" width="120">
+                  <template #default="{ row }">
+                    <el-tag :type="getDeliveryStatusType(order.orderStatus, order.fulfillmentStatus)" size="small">
+                      {{ getDeliveryStatusLabel(order.orderStatus, order.fulfillmentStatus) }}
+                    </el-tag>
                   </template>
                 </el-table-column>
                 <el-table-column label="单价" width="100">
@@ -439,7 +472,8 @@ onMounted(() => {
               </div>
             </el-card>
 
-            <el-card v-else-if="order.orderStatus === 'DELIVERING' || order.fulfillmentStatus === 'SUCCESS'" class="action-card">
+            <!-- 发货中状态 - 显示确认收货按钮 -->
+            <el-card v-else-if="order.orderStatus === 'DELIVERING'" class="action-card">
               <template #header>
                 <span>待确认</span>
               </template>
@@ -449,11 +483,12 @@ onMounted(() => {
               </el-button>
             </el-card>
 
+            <!-- 已完成状态 -->
             <el-card v-else-if="order.orderStatus === 'COMPLETED'" class="action-card success">
               <div class="success-info">
                 <el-icon :size="48" color="#67c23a"><CircleCheck /></el-icon>
                 <p>订单已完成</p>
-                <span class="sub-tip">感谢您的购买，欢迎再次光临</span>
+                <span class="sub-tip">结算状态：{{ order.settlementStatus === 'SETTLED' ? '已结算' : '待结算' }}</span>
               </div>
             </el-card>
 

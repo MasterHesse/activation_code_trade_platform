@@ -3,12 +3,13 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { authApi } from '@/api/auth'
 import {
   productApi, categoryApi,
   type Product, type ProductCategory, type ProductCategoryStatus, type ProductStatus,
   type CreateProductRequest, type CreateCategoryRequest
 } from '@/api/product'
-import { merchantApi } from '@/api/merchant'
+import { merchantApi, type Merchant } from '@/api/merchant'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -114,17 +115,44 @@ const productRules = {
   ]
 }
 
+// 确保用户已登录并获取最新用户信息
+const ensureAuthenticated = async (): Promise<string | null> => {
+  try {
+    const authResponse = await authApi.getCurrentUser() as { userId?: string; username?: string; role?: string }
+    if (authResponse?.userId) {
+      authStore.setUserInfo({
+        userId: authResponse.userId,
+        username: authResponse.username || authResponse.userId,
+        role: authResponse.role || 'ROLE_USER'
+      })
+      return authResponse.userId
+    }
+  } catch {
+    ElMessage.error('获取用户信息失败，请重新登录')
+    router.push('/login')
+  }
+  return null
+}
+
 // 加载商家信息
 const loadMerchant = async () => {
-  if (!authStore.userInfo?.userId) return
+  const userId = await ensureAuthenticated()
+  if (!userId) return
 
   try {
-    const merchant = await merchantApi.getByUserId(authStore.userInfo.userId) as unknown as { auditStatus?: string; merchantId?: string }
-    if (merchant && merchant.auditStatus === 'APPROVED' && merchant.merchantId) {
-      merchantId.value = merchant.merchantId
-      productForm.value.merchantId = merchant.merchantId
+    // 后端返回结构为 { code: 200, data: Merchant } 或 { code: 404, ... }
+    const response = await merchantApi.getByUserId(userId) as unknown as { code?: number; data?: Merchant }
+    if (response?.code === 200 && response.data) {
+      const merchantData = response.data
+      if (merchantData.auditStatus === 'APPROVED' && merchantData.merchantId) {
+        merchantId.value = merchantData.merchantId
+        productForm.value.merchantId = merchantData.merchantId
+      } else {
+        ElMessage.warning('您的商家资质尚未审核通过')
+        router.push('/merchant/apply')
+      }
     } else {
-      ElMessage.warning('您还未成为认证商家，无法管理商品')
+      ElMessage.warning('您还未申请成为商家')
       router.push('/merchant/apply')
     }
   } catch (e) {
@@ -260,7 +288,10 @@ const handleCreateProduct = async () => {
     
     try {
       await productApi.create(productForm.value)
-      ElMessage.success('商品创建成功')
+      ElMessage.success({
+        message: '商品创建成功！请先导入激活码库存，再点击「上架」发布商品。',
+        duration: 5000
+      })
       productDialogVisible.value = false
       productFormRef.value.resetFields()
       productForm.value.merchantId = merchantId.value || ''
@@ -363,11 +394,14 @@ onMounted(async () => {
           </el-table-column>
           <el-table-column prop="stockCount" label="库存" width="100" />
           <el-table-column prop="salesCount" label="销量" width="100" />
-          <el-table-column label="状态" width="100">
+          <el-table-column label="状态" width="140">
             <template #default="{ row }">
               <el-tag :type="statusTagType[row.status] || ''">
                 {{ statusOptions[row.status] || row.status }}
               </el-tag>
+              <el-tooltip v-if="row.status === 'DRAFT'" content="导入库存后，点击「上架」发布商品" placement="top">
+                <el-icon color="#E6A23C" style="margin-left: 4px; cursor: help;"><WarningFilled /></el-icon>
+              </el-tooltip>
             </template>
           </el-table-column>
           <el-table-column label="发货方式" width="100">

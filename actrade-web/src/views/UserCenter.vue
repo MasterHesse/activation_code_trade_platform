@@ -12,6 +12,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const loading = ref(false)
+const merchantLoading = ref(false)
 const userInfo = ref<User | null>(null)
 const merchantInfo = ref<Merchant | null>(null)
 
@@ -53,25 +54,25 @@ const isApprovedMerchant = computed(() => merchantInfo.value?.auditStatus === 'A
 const loadUserInfo = async () => {
   loading.value = true
   try {
-    // 如果已有 userInfo（从 localStorage 恢复），直接使用
-    if (authStore.userInfo) {
-      userInfo.value = authStore.userInfo as unknown as User
-      return
-    }
+    // 始终从后端获取最新的用户信息，确保角色是最新的
+    const authResponse = await authApi.getCurrentUser() as { userId?: string; role?: string; username?: string; email?: string; phone?: string; createdAt?: string }
 
-    // 否则调用 API 获取用户信息
-    const authResponse = await authApi.getCurrentUser() as { userId?: string }
-
-    // 获取完整用户信息
     if (authResponse.userId) {
-      const userResponse = await userApi.getById(authResponse.userId) as unknown as User
-      userInfo.value = userResponse
+      // 直接使用 authResponse 的数据（包含最新角色）
+      userInfo.value = {
+        userId: authResponse.userId,
+        username: authResponse.username || '',
+        role: authResponse.role || 'ROLE_USER',
+        email: authResponse.email,
+        phone: authResponse.phone,
+        createdAt: authResponse.createdAt
+      } as User
 
-      // 更新 authStore
+      // 更新 authStore（确保角色信息同步）
       authStore.setUserInfo({
-        userId: userResponse.userId,
-        username: userResponse.username,
-        role: userResponse.role
+        userId: authResponse.userId,
+        username: authResponse.username || '',
+        role: authResponse.role || 'ROLE_USER'
       })
     }
   } catch (e: unknown) {
@@ -86,8 +87,12 @@ const loadUserInfo = async () => {
   }
 }
 
-const loadMerchantInfo = async () => {
+const loadMerchantInfo = async (showLoading = false) => {
   if (!authStore.userInfo?.userId) return
+
+  if (showLoading) {
+    merchantLoading.value = true
+  }
 
   try {
     // 响应结构为 { code: 200, message: "success", data: Merchant } 或 { code: 404, ... }
@@ -98,10 +103,18 @@ const loadMerchantInfo = async () => {
       // 用户还不是商家（404），不显示提示
       merchantInfo.value = null
     }
-  } catch (e: unknown) {
+  } catch {
     // 用户还不是商家或其他错误，不显示提示
     merchantInfo.value = null
+  } finally {
+    if (showLoading) {
+      merchantLoading.value = false
+    }
   }
+}
+
+const refreshMerchantInfo = () => {
+  loadMerchantInfo(true)
 }
 
 const formatDate = (date: string | undefined) => {
@@ -176,9 +189,15 @@ onMounted(async () => {
           <template #header>
             <div class="card-header">
               <span>商家信息</span>
-              <el-tag :type="merchantStatusMap[merchantInfo.auditStatus]?.type">
-                {{ merchantStatusMap[merchantInfo.auditStatus]?.label }}
-              </el-tag>
+              <div class="header-actions">
+                <el-tag :type="merchantStatusMap[merchantInfo.auditStatus]?.type">
+                  {{ merchantStatusMap[merchantInfo.auditStatus]?.label }}
+                </el-tag>
+                <el-button text size="small" @click="refreshMerchantInfo" :loading="merchantLoading">
+                  <el-icon><Refresh /></el-icon>
+                  刷新
+                </el-button>
+              </div>
             </div>
           </template>
           <el-descriptions :column="2" border>
@@ -218,8 +237,8 @@ onMounted(async () => {
           </div>
         </el-card>
 
-        <!-- 未入驻商家提示 - 仅在用户已登录且非加载状态且确实不是商家时才显示 -->
-        <el-card v-if="!loading && !merchantInfo && currentRoleString === 'ROLE_USER'" class="apply-card">
+        <!-- 未入驻商家提示 - 仅在用户已登录且确实不是商家时才显示 -->
+        <el-card v-if="!loading && !merchantInfo" class="apply-card">
           <div class="apply-hint">
             <p class="hint-text">您还没有申请成为商家</p>
             <el-button type="primary" size="small" @click="router.push('/merchant/apply')">
@@ -233,6 +252,16 @@ onMounted(async () => {
           <div class="apply-hint pending">
             <p class="hint-text">商家申请正在审核中，请耐心等待...</p>
             <el-tag type="warning">审核中</el-tag>
+          </div>
+        </el-card>
+
+        <!-- 商家审核被拒绝提示 -->
+        <el-card v-if="!loading && merchantInfo && merchantInfo.auditStatus === 'REJECTED'" class="apply-card">
+          <div class="apply-hint rejected">
+            <p class="hint-text">商家申请未通过审核{{ merchantInfo.auditRemark ? `：${merchantInfo.auditRemark}` : '' }}</p>
+            <el-button type="primary" size="small" @click="router.push('/merchant/apply')">
+              重新申请
+            </el-button>
           </div>
         </el-card>
       </el-col>
@@ -306,6 +335,12 @@ onMounted(async () => {
       display: flex;
       justify-content: space-between;
       align-items: center;
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
     }
 
     .copy-text {
@@ -342,6 +377,12 @@ onMounted(async () => {
       &.pending {
         .hint-text {
           color: #E6A23C;
+        }
+      }
+
+      &.rejected {
+        .hint-text {
+          color: #F56C6C;
         }
       }
     }

@@ -183,6 +183,9 @@ export interface OrderItem {
   unitPrice: number
   quantity: number
   subtotalAmount: number
+  deliveryStatus?: string  // PENDING, PROCESSING, DELIVERED, FAILED
+  assignedCodeIds?: string[]  // 已分配的激活码 ID 列表
+  activationTaskId?: number  // 激活任务 ID
   createdAt: string
 }
 

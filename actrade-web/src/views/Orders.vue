@@ -54,16 +54,21 @@ const loadOrders = async () => {
 
   loading.value = true
   try {
-    // axios 拦截器返回 response.data，所以 response 结构为 { code, message, data: PageResponse }
+    // axios 拦截器返回 response.data，结构为 { code: 200, message, data: PageResponse }
     const response = await orderApi.pageUserOrders(authStore.userInfo.userId, {
       page: currentPage.value - 1,
       size: pageSize.value,
       status: statusFilter.value || undefined
-    }) as unknown as { data?: { content?: OrderSummary[]; totalElements?: number } }
+    }) as unknown as { code?: number; data?: { content?: OrderSummary[]; totalElements?: number } }
 
-    // 修正：去掉多余的 .data 层级
-    orders.value = response?.data?.content || []
-    total.value = response?.data?.totalElements || 0
+    // 检查响应状态
+    if (response?.code === 200 && response.data) {
+      orders.value = response.data.content || []
+      total.value = response.data.totalElements || 0
+    } else {
+      orders.value = []
+      total.value = 0
+    }
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
     ElMessage.error(err.response?.data?.message || '加载订单失败')

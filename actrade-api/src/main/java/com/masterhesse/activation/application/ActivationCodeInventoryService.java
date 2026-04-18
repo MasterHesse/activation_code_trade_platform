@@ -7,9 +7,12 @@ import com.masterhesse.activation.api.response.ActivationCodeInventoryResponse;
 import com.masterhesse.activation.domain.entity.ActivationCodeInventory;
 import com.masterhesse.activation.domain.enums.ActivationCodeStatus;
 import com.masterhesse.activation.persistence.ActivationCodeInventoryRepository;
-import com.masterhesse.product.persistence.ProductRepository; // 按你的实际包名调整
+import com.masterhesse.product.domain.Product;
+import com.masterhesse.product.persistence.ProductRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -21,23 +24,15 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
+@Slf4j
 @Service
+@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ActivationCodeInventoryService {
 
     private final ActivationCodeInventoryRepository activationCodeInventoryRepository;
     private final ProductRepository productRepository;
     private final EntityManager entityManager;
-
-    public ActivationCodeInventoryService(
-            ActivationCodeInventoryRepository activationCodeInventoryRepository,
-            ProductRepository productRepository,
-            EntityManager entityManager
-    ) {
-        this.activationCodeInventoryRepository = activationCodeInventoryRepository;
-        this.productRepository = productRepository;
-        this.entityManager = entityManager;
-    }
 
     @Transactional
     public ActivationCodeInventoryResponse create(CreateActivationCodeRequest request) {
@@ -78,6 +73,7 @@ public class ActivationCodeInventoryService {
         }
 
         Set<String> seenHashes = new HashSet<>();
+        int importedCount = request.items().size();
 
         for (BatchCreateActivationCodeRequest.Item item : request.items()) {
             if (!seenHashes.add(item.codeValueHash())) {
@@ -106,6 +102,15 @@ public class ActivationCodeInventoryService {
                 .toList();
 
         List<ActivationCodeInventory> savedList = activationCodeInventoryRepository.saveAll(entities);
+
+        // 更新商品库存：新增可用激活码数量
+        Product product = productRepository.findById(request.productId())
+                .orElseThrow(() -> new EntityNotFoundException("商品不存在"));
+        product.setStockCount(product.getStockCount() + importedCount);
+        productRepository.save(product);
+
+        log.info("Batch import completed. productId={}, productName={}, importedCount={}, newStockCount={}",
+                product.getProductId(), product.getName(), importedCount, product.getStockCount());
 
         entityManager.flush();
         savedList.forEach(entityManager::refresh);

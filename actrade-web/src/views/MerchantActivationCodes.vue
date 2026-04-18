@@ -348,6 +348,10 @@ onMounted(async () => {
             :rows="10"
             placeholder="请输入激活码，每行一个"
           />
+          <div class="import-info" v-if="batchImportText.trim().split('\n').filter(l => l.trim()).length > 0">
+            <el-icon color="#67c23a"><SuccessFilled /></el-icon>
+            <span>共 {{ batchImportText.trim().split('\n').filter(l => l.trim()).length }} 个激活码</span>
+          </div>
           <div class="tip">提示：每行一个激活码，导入后将自动生成掩码显示</div>
         </el-form-item>
       </el-form>
@@ -406,6 +410,16 @@ onMounted(async () => {
     margin-top: 8px;
     font-size: 12px;
     color: #909399;
+  }
+
+  .import-info {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    font-size: 14px;
+    color: #67c23a;
+    font-weight: 500;
   }
 }
 </style>

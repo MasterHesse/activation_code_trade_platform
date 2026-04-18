@@ -1,6 +1,8 @@
 package com.masterhesse.order.api;
 
 import com.masterhesse.order.application.OrderPaymentService;
+import com.masterhesse.order.domain.Order;
+import com.masterhesse.order.persistence.OrderRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -12,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @RestController
@@ -19,9 +22,24 @@ import java.util.Map;
 public class AlipayCallbackController {
 
     private final OrderPaymentService orderPaymentService;
+    private final OrderRepository orderRepository;
 
-    public AlipayCallbackController(OrderPaymentService orderPaymentService) {
+    public AlipayCallbackController(OrderPaymentService orderPaymentService, OrderRepository orderRepository) {
         this.orderPaymentService = orderPaymentService;
+        this.orderRepository = orderRepository;
+    }
+
+    /**
+     * 测试用：模拟支付成功回调（跳过签名验证）
+     * 仅用于开发/测试环境
+     */
+    @PostMapping("/test/simulate-success")
+    public String simulatePaymentSuccess(@RequestParam String paymentRequestNo,
+                                         @RequestParam(defaultValue = "ALIPAY_TEST_123456") String tradeNo,
+                                         @RequestParam(defaultValue = "9.99") String totalAmount) {
+        log.info("Test simulate payment success. paymentRequestNo={}, tradeNo={}, totalAmount={}",
+                paymentRequestNo, tradeNo, totalAmount);
+        return orderPaymentService.simulatePaymentSuccess(paymentRequestNo, tradeNo, totalAmount);
     }
 
     @PostMapping("/notify")
@@ -55,6 +73,20 @@ public class AlipayCallbackController {
                 log.error("Failed to handle alipay return. outTradeNo={}", outTradeNo, e);
             }
         }
+
+        // 根据 paymentRequestNo 查询订单 ID 用于跳转
+        String orderId = "";
+        if (outTradeNo != null && !outTradeNo.isEmpty()) {
+            Optional<Order> orderOpt = orderRepository.findByPaymentRequestNo(outTradeNo);
+            if (orderOpt.isPresent()) {
+                orderId = orderOpt.get().getOrderId().toString();
+            }
+        }
+
+        // 构建跳转目标 URL
+        String orderPageUrl = orderId.isEmpty() ? "/orders" : "/orders/" + orderId;
+
+        boolean isSuccess = "TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus);
 
         return """
                 <!DOCTYPE html>
@@ -92,21 +124,16 @@ public class AlipayCallbackController {
                             background: #f4f4f5;
                             border-radius: 4px;
                         }
+                        .btn {
+                            display: inline-block;
+                            padding: 8px 16px;
+                            background: #409eff;
+                            color: white;
+                            text-decoration: none;
+                            border-radius: 4px;
+                            margin-top: 10px;
+                        }
                     </style>
-                    <script>
-                        // 3秒后自动跳转到订单页面
-                        setTimeout(function() {
-                            var orderPage = '/orders/' + window.location.search.match(/orderId=([^&]+)/)?.[1] || '';
-                            if (window.opener) {
-                                // 如果有 opener 窗口，关闭当前窗口并刷新 opener
-                                window.opener.location.href = orderPage || '/orders';
-                                window.close();
-                            } else {
-                                // 没有 opener，跳转到订单页面
-                                window.location.href = orderPage || '/orders';
-                            }
-                        }, 3000);
-                    </script>
                 </head>
                 <body>
                     <div class="card">
@@ -118,21 +145,33 @@ public class AlipayCallbackController {
                         <p class="hint">注意：最终支付结果以后端异步通知(notify)为准。</p>
                         <div class="redirect-info">
                             <p>页面将在 <span id="countdown">3</span> 秒后自动跳转...</p>
+                            <a href="%s" class="btn" id="orderBtn">立即跳转查看订单</a>
                         </div>
                     </div>
                     <script>
                         var seconds = 3;
                         var countdown = setInterval(function() {
                             seconds--;
-                            document.getElementById('countdown').textContent = seconds;
-                            if (seconds <= 0) clearInterval(countdown);
+                            var el = document.getElementById('countdown');
+                            if (el) el.textContent = seconds;
+                            if (seconds <= 0) {
+                                clearInterval(countdown);
+                                // 如果有 opener 窗口，关闭当前窗口并刷新 opener
+                                if (window.opener) {
+                                    window.opener.location.href = '%s';
+                                    window.close();
+                                } else {
+                                    window.location.href = '%s';
+                                }
+                            }
                         }, 1000);
                     </script>
                 </body>
                 </html>
                 """.formatted(
-                    "TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus) ? "success" : "",
-                    outTradeNo, tradeNo, totalAmount, tradeStatus);
+                    isSuccess ? "success" : "",
+                    outTradeNo, tradeNo, totalAmount, tradeStatus,
+                    orderPageUrl, orderPageUrl, orderPageUrl);
     }
 
     private Map<String, String> extractParams(HttpServletRequest request) {

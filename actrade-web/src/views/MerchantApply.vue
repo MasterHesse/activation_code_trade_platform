@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { authApi } from '@/api/auth'
 import { merchantApi, type CreateMerchantRequest, type Merchant, type MerchantAuditStatus } from '@/api/merchant'
 
 const router = useRouter()
@@ -63,17 +64,47 @@ const getAuditStatusType = (status: MerchantAuditStatus) => {
   return map[status] || ''
 }
 
+// 确保用户已登录并从后端获取最新用户信息
+const ensureAuthenticated = async (): Promise<string | null> => {
+  try {
+    // 从后端获取最新的用户信息，确保角色是最新的
+    const authResponse = await authApi.getCurrentUser() as { userId?: string; role?: string; username?: string }
+    if (authResponse?.userId) {
+      // 更新 authStore
+      authStore.setUserInfo({
+        userId: authResponse.userId,
+        username: authResponse.username || '',
+        role: authResponse.role || 'ROLE_USER'
+      })
+      return authResponse.userId
+    }
+  } catch {
+    ElMessage.error('获取用户信息失败，请重新登录')
+    router.push('/login')
+  }
+  return null
+}
+
 const checkExistingMerchant = async () => {
-  if (!authStore.userInfo?.userId) {
+  checkLoading.value = true
+
+  // 先确保用户已登录并获取最新信息
+  const userId = await ensureAuthenticated()
+  if (!userId) {
     checkLoading.value = false
     return
   }
 
   try {
-    const response = await merchantApi.getByUserId(authStore.userInfo.userId) as unknown as Merchant
-    existingMerchant.value = response
+    const response = await merchantApi.getByUserId(userId) as unknown as { code?: number; message?: string; data?: Merchant }
+    // 后端返回结构为 { code: 200, data: Merchant } 或 { code: 404, ... }
+    if (response?.code === 200 && response.data) {
+      existingMerchant.value = response.data
+    } else {
+      existingMerchant.value = null
+    }
   } catch {
-    // 用户尚未申请商家
+    // 用户尚未申请商家（404 等错误）
     existingMerchant.value = null
   } finally {
     checkLoading.value = false

@@ -9,15 +9,15 @@ public record ApiResponse<T>(
         T data
 ) {
     public static <T> ApiResponse<T> success(T data) {
-        return new ApiResponse<>(0, "success", data);
+        return new ApiResponse<>(200, "success", data);
     }
 
     public static <T> ApiResponse<T> success(String message, T data) {
-        return new ApiResponse<>(0, message, data);
+        return new ApiResponse<>(200, message, data);
     }
 
     public static ApiResponse<Void> success(String message) {
-        return new ApiResponse<>(0, message, null);
+        return new ApiResponse<>(200, message, null);
     }
 
     public static ApiResponse<Void> error(int code, String message) {

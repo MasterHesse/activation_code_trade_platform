@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import { useAuthStore } from '@/stores/auth'
+import { authApi } from '@/api/auth'
 import { merchantApi, type Merchant } from '@/api/merchant'
 import { settlementApi, type SellerSettlement, type SettlementStatus } from '@/api/product'
 
@@ -12,6 +13,26 @@ const authStore = useAuthStore()
 
 const loading = ref(false)
 const merchant = ref<Merchant | null>(null)
+const pageLoading = ref(true)
+
+// 确保用户已登录并获取最新用户信息
+const ensureAuthenticated = async (): Promise<string | null> => {
+  try {
+    const authResponse = await authApi.getCurrentUser() as { userId?: string; username?: string; role?: string }
+    if (authResponse?.userId) {
+      authStore.setUserInfo({
+        userId: authResponse.userId,
+        username: authResponse.username || authResponse.userId,
+        role: authResponse.role || 'ROLE_USER'
+      })
+      return authResponse.userId
+    }
+  } catch {
+    ElMessage.error('获取用户信息失败，请重新登录')
+    router.push('/login')
+  }
+  return null
+}
 const settlements = ref<SellerSettlement[]>([])
 const total = ref(0)
 const currentPage = ref(1)
@@ -33,15 +54,15 @@ const settlementStatusMap: Record<string, { label: string; type: string }> = {
 }
 
 const loadMerchant = async () => {
-  if (!authStore.userInfo?.userId) {
-    ElMessage.error('请先登录')
-    router.push('/login')
+  const userId = await ensureAuthenticated()
+  if (!userId) {
+    pageLoading.value = false
     return
   }
 
   try {
-    // 响应结构为 { code: 200, message: "success", data: Merchant } 或 { code: 404, ... }
-    const response = await merchantApi.getByUserId(authStore.userInfo.userId) as unknown as { code?: number; data?: Merchant }
+    // 后端返回结构为 { code: 200, message: "success", data: Merchant } 或 { code: 404, ... }
+    const response = await merchantApi.getByUserId(userId) as unknown as { code?: number; data?: Merchant }
     if (response?.code === 200 && response.data) {
       merchant.value = response.data
       if (merchant.value?.auditStatus !== 'APPROVED') {
@@ -55,6 +76,8 @@ const loadMerchant = async () => {
   } catch {
     ElMessage.warning('您还未申请成为商家')
     router.push('/merchant/apply')
+  } finally {
+    pageLoading.value = false
   }
 }
 

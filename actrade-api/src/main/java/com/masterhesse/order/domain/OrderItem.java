@@ -9,11 +9,14 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.Lob;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -53,6 +56,27 @@ public class OrderItem {
 
     @Column(name = "subtotal_amount", nullable = false, precision = 18, scale = 2)
     private BigDecimal subtotalAmount;
+
+    /** 发货状态：PENDING, PROCESSING, DELIVERED, FAILED */
+    @Column(name = "delivery_status", length = 32)
+    private String deliveryStatus;
+
+    /** 已分配的激活码 ID 列表（逗号分隔存储） */
+    @Lob
+    @Column(name = "assigned_code_ids", columnDefinition = "text")
+    private String assignedCodeIdsJson;
+
+    /** 激活工具 ID（TOOL_EXECUTION 模式使用） */
+    @Column(name = "activation_tool_id")
+    private UUID activationToolId;
+
+    /** 激活工具版本 ID（TOOL_EXECUTION 模式使用） */
+    @Column(name = "activation_tool_version_id")
+    private UUID activationToolVersionId;
+
+    /** 激活任务 ID（TOOL_EXECUTION 模式使用） */
+    @Column(name = "activation_task_id")
+    private Long activationTaskId;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -140,5 +164,56 @@ public class OrderItem {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getDeliveryStatus() {
+        return deliveryStatus;
+    }
+
+    public void setDeliveryStatus(String deliveryStatus) {
+        this.deliveryStatus = deliveryStatus;
+    }
+
+    public List<String> getAssignedCodeIds() {
+        if (assignedCodeIdsJson == null || assignedCodeIdsJson.isBlank()) {
+            return new ArrayList<>();
+        }
+        try {
+            return new java.util.ArrayList<>(List.of(assignedCodeIdsJson.split(",")));
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    public void assignCodes(List<String> codeIds) {
+        if (codeIds == null || codeIds.isEmpty()) {
+            this.assignedCodeIdsJson = null;
+        } else {
+            this.assignedCodeIdsJson = String.join(",", codeIds);
+        }
+    }
+
+    public UUID getActivationToolId() {
+        return activationToolId;
+    }
+
+    public void setActivationToolId(UUID activationToolId) {
+        this.activationToolId = activationToolId;
+    }
+
+    public UUID getActivationToolVersionId() {
+        return activationToolVersionId;
+    }
+
+    public void setActivationToolVersionId(UUID activationToolVersionId) {
+        this.activationToolVersionId = activationToolVersionId;
+    }
+
+    public Long getActivationTaskId() {
+        return activationTaskId;
+    }
+
+    public void setActivationTaskId(Long activationTaskId) {
+        this.activationTaskId = activationTaskId;
     }
 }
